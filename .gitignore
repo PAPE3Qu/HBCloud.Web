@@ -28,6 +28,7 @@ frontend/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+tsconfig.json
 
 ########## 项目运行时数据（按你目录树实际名字）##########
 data/
