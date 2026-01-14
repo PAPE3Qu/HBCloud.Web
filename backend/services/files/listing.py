@@ -8,7 +8,11 @@ from ...config import SpaceType
 from .base import resolve_root, ensure_department_read_access
 from . import dept as dept_svc
 from . import dept_roles as dept_roles_svc
+from . import links as links_svc
 from ...routers.audit import log_action
+
+# 隐藏的系统文件列表
+HIDDEN_FILES = {".links.json"}
 
 
 async def list_files(spaceType: str, departmentId: Optional[str], path: str, current_user: Dict[str, Any], client_ip: str = "") -> Dict[str, Any]:
@@ -52,6 +56,9 @@ async def list_files(spaceType: str, departmentId: Optional[str], path: str, cur
             continue
         if entry.name == "config.json" and spaceType == SpaceType.DEPARTMENT:
             continue
+        # 隐藏系统文件（如 .links.json）
+        if entry.name in HIDDEN_FILES:
+            continue
         stat = entry.stat()
         items.append(
             {
@@ -61,6 +68,16 @@ async def list_files(spaceType: str, departmentId: Optional[str], path: str, cur
                 "modified_time": stat.st_mtime,
             }
         )
+    
+    # 获取当前目录的链接项并追加到 items
+    try:
+        link_items = links_svc.get_links_for_directory(spaceType, departmentId, path, current_user)
+        items.extend(link_items)
+    except Exception as e:
+        import traceback
+        print(f"[LINKS ERROR] Failed to get links: {e}")
+        traceback.print_exc()
+    
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
     result = {"current_path": logical_rel, "items": items}
     try:

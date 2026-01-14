@@ -1,7 +1,9 @@
 <template>
   <div class="file-browser" @click.self="detailVisible = false">
     <div class="file-browser-body" @click.self="favoriteVisible = false">
-      <div class="toolbar-row top-row">
+      <!-- 固定工具栏 -->
+      <div class="toolbar-sticky">
+      <div class="toolbar-row top-row" ref="topRow" :class="{ 'compact-row': topRowCompact }">
         <div class="toolbar-left">
           <!-- 空间 & 部门选择，使用更简洁的下拉样式 -->
           <label class="field">
@@ -22,46 +24,55 @@
             </select>
           </label>
         </div>
-        <div class="toolbar-right">
+        <div class="toolbar-right" ref="topRight">
           <div class="toolbar-actions">
-            <button class="btn" type="button" @click="onRefreshClick">刷新</button>
-            <button class="btn" type="button" @click="onDownloadZip" :disabled="selectedItems.length === 0">打包下载</button>
-            <button class="btn" type="button" @click="openMoveDialog" :disabled="selectedItems.length === 0">移动到</button>
-            <button class="btn" type="button" @click="openCopyDialog" :disabled="selectedItems.length === 0">复制到</button>
-            <button class="btn btn-danger" type="button" @click="onDeleteSelected" :disabled="selectedItems.length === 0">批量删除</button>
-            <button class="btn" type="button" @click="onCreateDept">新建部门</button>
-            <button class="btn btn-danger" type="button" @click="onDeleteDept" :disabled="spaceType !== 'department' || !departmentId">
-              删除部门
-            </button>
-            <button class="btn" type="button" @click="onCreateFolder">新建文件夹</button>
-            <button class="btn" type="button" @click="onUploadClick">上传文件</button>
+            <button class="btn" type="button" @click="onRefreshClick" title="刷新"><span class="btn-icon">🔄</span><span class="btn-text">刷新</span></button>
+            <button class="btn" type="button" @click="onDownloadZip" :disabled="selectedItems.length === 0" title="打包下载"><span class="btn-icon">📦</span><span class="btn-text">打包下载</span></button>
+            <button class="btn" type="button" @click="openMoveDialog" :disabled="selectedItems.length === 0" title="移动到"><span class="btn-icon">📤</span><span class="btn-text">移动到</span></button>
+            <button class="btn" type="button" @click="openCopyDialog" :disabled="selectedItems.length === 0" title="复制到"><span class="btn-icon">📋</span><span class="btn-text">复制到</span></button>
+            <button class="btn btn-danger" type="button" @click="onDeleteSelected" :disabled="selectedItems.length === 0" title="删除"><span class="btn-icon">🗑️</span><span class="btn-text">删除</span></button>
+            <button class="btn" type="button" @click="onCreateDept" title="新建部门"><span class="btn-icon">🏢</span><span class="btn-text">新建部门</span></button>
+            <button class="btn btn-danger" type="button" @click="onDeleteDept" :disabled="spaceType !== 'department' || !departmentId" title="删除部门"><span class="btn-icon">❌</span><span class="btn-text">删除部门</span></button>
+            <button class="btn" type="button" @click="onCreateFolder" title="新建文件夹"><span class="btn-icon">📁</span><span class="btn-text">新建文件夹</span></button>
+            <button class="btn" type="button" @click="onUploadClick" title="上传文件"><span class="btn-icon">⬆️</span><span class="btn-text">上传文件</span></button>
           </div>
         </div>
       </div>
 
-      <div class="toolbar-row second-row">
+      <div class="toolbar-row second-row" ref="secondRow" :class="{ 'compact-row': secondRowCompact }">
         <div class="toolbar-left second-left">
-          <button class="icon-btn" type="button" @click="goRoot" title="返回空间根目录">
-            ⌂
-          </button>
-          <button class="icon-btn" type="button" @click="goUp" :disabled="!canGoUp" title="返回上级目录">
-            ⬆
-          </button>
-          <span class="path">当前路径：/{{ currentPath }}</span>
+          <div class="nav-group" ref="navGroup">
+            <button class="nav-btn" type="button" @click="goBack" :disabled="!canGoBack" title="返回上一个访问位置">◀</button>
+            <button class="nav-btn" type="button" @click="goRoot" title="返回空间根目录">⚑</button>
+            <button class="nav-btn" type="button" @click="goUp" :disabled="!canGoUp" title="返回上级目录">▲</button>
+          </div>
+          <div class="breadcrumb-container" ref="breadcrumbContainer">
+            <div class="breadcrumb-scroll" ref="breadcrumbScroll">
+              <button class="breadcrumb-btn root-btn" type="button" @click="goRoot" title="根目录">/</button>
+              <template v-for="(bc, idx) in breadcrumbDisplay" :key="idx">
+                <span class="breadcrumb-sep">/</span>
+                <!-- 普通目录段 -->
+                <button
+                  v-if="bc.type === 'segment'"
+                  class="breadcrumb-btn"
+                  :class="{ 'current-crumb': bc.index === breadcrumbs.length - 1 }"
+                  type="button"
+                  @click="navigateToBreadcrumb(bc.index)"
+                  :title="bc.name"
+                >{{ bc.name }}</button>
+                <!-- 折叠段 "..."，不可点击 -->
+                <span v-else class="breadcrumb-ellipsis">...</span>
+              </template>
+            </div>
+          </div>
         </div>
-        <div class="toolbar-right second-right">
+        <div class="toolbar-right second-right" ref="secondRight">
           <div class="toolbar-actions">
-            <button class="btn" type="button" @click="onShare" :disabled="spaceType === 'safe'">分享</button>
-            <button
-              class="btn"
-              type="button"
-              @click="addCurrentOrSelectedToFavorite"
-              :disabled="!canAddFavorite"
-            >
-              固定到快速访问
-            </button>
-            <button class="btn" type="button" @click="onCompress" :disabled="!canCompress">压缩</button>
-            <button class="btn" type="button" @click="onUnzipSelected" :disabled="!canUnzip">解压缩</button>
+            <button class="btn" type="button" @click="openLinkDialog" :disabled="selectedItems.length === 0 || hasLinkInSelection" title="链接到"><span class="btn-icon">🔗</span><span class="btn-text">链接到</span></button>
+            <button class="btn" type="button" @click="onShare" :disabled="spaceType === 'safe'" title="分享"><span class="btn-icon">📤</span><span class="btn-text">分享</span></button>
+            <button class="btn" type="button" @click="addCurrentOrSelectedToFavorite" :disabled="!canAddFavorite" title="快速访问"><span class="btn-icon">📌</span><span class="btn-text">快速访问</span></button>
+            <button class="btn" type="button" @click="onCompress" :disabled="!canCompress" title="压缩"><span class="btn-icon">🗜️</span><span class="btn-text">压缩</span></button>
+            <button class="btn" type="button" @click="onUnzipSelected" :disabled="!canUnzip" title="解压缩"><span class="btn-icon">📂</span><span class="btn-text">解压缩</span></button>
           </div>
           <div class="search-bar">
             <div class="select-wrapper">
@@ -72,13 +83,12 @@
                 @keyup.enter="onSearch"
               />
             </div>
-            <button class="btn" type="button" @click="onSearch">搜索</button>
-            <button class="btn" type="button" @click="onClearSearch" v-if="inSearchMode">
-              清除搜索
-            </button>
+            <button class="btn" type="button" @click="onSearch" title="搜索"><span class="btn-icon">🔍</span><span class="btn-text">搜索</span></button>
+            <button class="btn" type="button" @click="onClearSearch" v-if="inSearchMode" title="清除搜索"><span class="btn-icon">✖️</span><span class="btn-text">清除搜索</span></button>
           </div>
         </div>
       </div>
+      </div><!-- 关闭 toolbar-sticky -->
 
       <input
         ref="fileInput"
@@ -128,7 +138,7 @@
                   <span>{{ fileIcon(item) }}</span>
                   <span class="name">{{ item.name }}</span>
                 </td>
-                <td>{{ item.is_dir ? '文件夹' : '文件' }}</td>
+                <td>{{ item._is_link ? '快捷链接' : (item.is_dir ? '文件夹' : '文件') }}</td>
                 <td>{{ item.is_dir ? '-' : formatSize(item.size) }}</td>
                 <td>{{ formatTime(item.modified_time) }}</td>
                 <td class="ops-cell">
@@ -363,6 +373,79 @@
         </div>
       </transition>
 
+      <!-- 链接到 文件/文件夹 弹窗 -->
+      <transition name="fade-dialog">
+        <div v-if="showLink" class="move-mask" @click="closeLinkDialog">
+          <div class="move-dialog" @click.stop>
+            <div class="move-header">链接到（创建快捷方式）</div>
+            <div class="move-body">
+              <div class="link-tip">将在目标位置创建快捷链接，双击链接可跳转到源文件位置。</div>
+              <div class="move-row move-target-row">
+                <div class="field move-field">
+                  <span class="field-label">目标空间</span>
+                  <select class="select-basic select-sm" v-model="linkSpaceType" @change="onLinkSpaceChange">
+                    <option value="public">公共空间</option>
+                    <option value="department">部门空间</option>
+                    <option value="safe">个人保险库</option>
+                  </select>
+                </div>
+                <div class="field move-field" v-if="linkSpaceType === 'department'">
+                  <span class="field-label">目标部门</span>
+                  <select class="select-basic select-sm" v-model="linkDepartmentId" @change="loadLinkList">
+                    <option disabled value="">请选择部门</option>
+                    <option v-for="d in allDepartments" :key="d.id" :value="d.id">{{ d.name }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <div class="picker-pathbar">
+                  <button class="btn btn-icon btn-sm" type="button" @click="linkGoRoot">首页</button>
+                  <button class="btn btn-icon btn-sm" type="button" @click="linkGoUp" :disabled="!linkCanGoUp">上级</button>
+                  <span class="path">目标路径：/{{ linkPath }}</span>
+                </div>
+              </div>
+              <div class="row move-toolbar">
+                <button class="btn btn-sm" type="button" @click="onLinkNewFolder">新建文件夹</button>
+              </div>
+              <div class="move-list">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>名称</th>
+                      <th style="width:80px">类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="it in linkItems"
+                      :key="it.name"
+                      :class="{ dir: it.is_dir }"
+                      @dblclick="onLinkDblClick(it)"
+                    >
+                      <td>
+                        <span>{{ it.is_dir ? '📁' : '📄' }}</span>
+                        <span class="name">{{ it.name }}</span>
+                      </td>
+                      <td>{{ it.is_dir ? '文件夹' : '文件' }}</td>
+                    </tr>
+                    <tr v-if="!linkItems.length && !linkLoading">
+                      <td colspan="2" class="empty">该目录下暂无子文件夹/文件</td>
+                    </tr>
+                    <tr v-if="linkLoading">
+                      <td colspan="2" class="loading">加载中...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="move-footer">
+              <button class="btn btn-primary btn-sm" type="button" @click="confirmLink">确定</button>
+              <button class="btn btn-sm" type="button" @click="closeLinkDialog">取消</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- 文件详情侧滑面板 -->
       <div v-if="detailVisible" class="detail-overlay">
         <div class="detail-mask" @click="detailVisible = false"></div>
@@ -468,6 +551,19 @@ const showImagePreview = ref(false)
 const uploading = ref(false)
 const compressing = ref(false)
 const uploadProgress = ref({ active: false, text: '', percent: 0 })
+
+// 顶部两行工具栏 DOM 引用，用于根据实际宽度动态调整布局
+const topRow = ref(null)
+const topRight = ref(null)
+const secondRow = ref(null)
+const secondRight = ref(null)
+const navGroup = ref(null)
+const breadcrumbContainer = ref(null)
+const breadcrumbScroll = ref(null)
+
+// 工具栏紧凑模式（按钮仅显示图标）
+const topRowCompact = ref(false)
+const secondRowCompact = ref(false)
 
 // 新增：统一的耗时任务遮罩状态（用于压缩/解压/移动/复制/打包下载等）
 const busyTask = ref({ active: false, text: '', percent: 0 })
@@ -616,9 +712,79 @@ const detailVisible = ref(false)
 const detailFile = ref(null)
 const detailStat = ref(null)
 
+// 浏览历史记录栈（用于"返回"功能）
+const browseHistory = ref([])
+const isNavigatingBack = ref(false)  // 标记是否正在执行返回操作，避免重复记录
+
 const canGoUp = computed(() => currentPath.value && currentPath.value !== '.')
+
+// 面包屑导航计算属性
+const breadcrumbs = computed(() => {
+  const p = currentPath.value
+  if (!p || p === '.' || p === '') return []
+  // 分割路径，过滤空字符串
+  return p.split('/').filter(seg => seg && seg !== '.')
+})
+// 根据实际可用宽度动态决定从第几个目录开始显示（左侧目录逐步隐藏）
+const breadcrumbVisibleStart = ref(0)
+
+// 对外提供的面包屑展示列表：
+// - 当 breadcrumbVisibleStart > 0 且可见段多于 1 个时，在最左侧插入一个不可点击的 "..."
+// - 始终保证最后一级目录可见
+const breadcrumbDisplay = computed(() => {
+  const list = breadcrumbs.value
+  const total = list.length
+  if (!total) return []
+
+  let start = breadcrumbVisibleStart.value
+  if (start < 0) start = 0
+  // 至少保留 2 层目录（如果总数不足 2，则按实际数量保留）
+  if (total <= 2) {
+    if (start > total - 1) start = total - 1
+  } else {
+    if (start > total - 2) start = total - 2
+  }
+
+  const visible = list.slice(start)
+  const result = []
+
+  if (start > 0 && visible.length > 1) {
+    result.push({ type: 'ellipsis' })
+  }
+
+  visible.forEach((name, idx) => {
+    result.push({ type: 'segment', name, index: start + idx })
+  })
+
+  return result
+})
+
+// 导航到面包屑指定位置
+const navigateToBreadcrumb = (index) => {
+  if (index < 0) {
+    goRoot()
+    return
+  }
+  const crumbs = breadcrumbs.value
+  if (index >= crumbs.length - 1) {
+    // 点击最后一个（当前目录），不做跳转
+    return
+  }
+  // 构建目标路径
+  const targetPath = crumbs.slice(0, index + 1).join('/')
+  pushHistory()
+  currentPath.value = targetPath
+  loadList()
+}
 const moveCanGoUp = computed(() => movePath.value && movePath.value !== '')
 const copyCanGoUp = computed(() => copyPath.value && copyPath.value !== '')
+const linkCanGoUp = computed(() => linkPath.value && linkPath.value !== '')
+
+// 是否可以返回上一个位置
+const canGoBack = computed(() => browseHistory.value.length > 0)
+
+// 判断选中项是否包含链接（链接不能创建链接的链接）
+const hasLinkInSelection = computed(() => selectedItems.value.some(it => it._is_link))
 
 const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super')
 
@@ -695,6 +861,10 @@ const getApiPathForItem = (item) => {
 }
 
 const fileIcon = (item) => {
+  // 链接项显示特殊图标
+  if (item._is_link) {
+    return item.is_dir ? '📁🔗' : '📄🔗'
+  }
   if (item.is_dir) return '📁'
   const lower = (item.name || '').toLowerCase()
   if (lower.endsWith('.zip')) return '📦'
@@ -703,10 +873,21 @@ const fileIcon = (item) => {
   return '📃'
 }
 
-const itemKey = (item) => `${item.name}-${item.is_dir ? 'd' : 'f'}`
+// 生成列表项唯一 key：链接使用 _link_id，普通文件使用 name-type
+const itemKey = (item) => {
+  if (item._is_link && item._link_id) {
+    return `link-${item._link_id}`
+  }
+  return `${item.name}-${item.is_dir ? 'd' : 'f'}`
+}
 
+// 判断项是否被选中：链接使用 _link_id 判断
 const isSelected = (item) => {
-  return selectedItems.value.some((s) => s.name === item.name && s.is_dir === item.is_dir)
+  if (item._is_link && item._link_id) {
+    return selectedItems.value.some((s) => s._link_id === item._link_id)
+  }
+  // 普通文件排除链接项
+  return selectedItems.value.some((s) => s.name === item.name && s.is_dir === item.is_dir && !s._is_link)
 }
 
 const isAllSelected = computed(() => {
@@ -740,7 +921,12 @@ const isHighlight = (item) => {
 
 const toggleSelect = (item) => {
   if (isSelected(item)) {
-    selectedItems.value = selectedItems.value.filter((s) => !(s.name === item.name && s.is_dir === item.is_dir))
+    // 取消选中：链接使用 _link_id，普通文件使用 name+is_dir
+    if (item._is_link && item._link_id) {
+      selectedItems.value = selectedItems.value.filter((s) => s._link_id !== item._link_id)
+    } else {
+      selectedItems.value = selectedItems.value.filter((s) => !(s.name === item.name && s.is_dir === item.is_dir && !s._is_link))
+    }
   } else {
     selectedItems.value.push({ ...item })
   }
@@ -813,10 +999,15 @@ const loadList = async () => {
     }
   } finally {
     loading.value = false
+    // 列表加载完成后，根据当前宽度和路径重新计算工具栏布局
+    nextTick(() => {
+      updateToolbarLayout()
+    })
   }
 }
 
 const reload = async () => {
+  pushHistory()  // 记录当前位置（部门切换时调用）
   await loadList()
 }
 
@@ -829,6 +1020,7 @@ const onRefreshClick = async () => {
 
 const onSpaceTypeChange = async () => {
   // 切空间时先清理搜索/选择，避免“看起来没刷新”
+  pushHistory()  // 记录当前位置
   inSearchMode.value = false
   searchResults.value = []
   selectedItems.value = []
@@ -865,12 +1057,83 @@ const onRowClick = (item, event) => {
   toggleSelect(item)
 }
 
-const onItemDblClick = (item) => {
+const onItemDblClick = async (item) => {
+  // 如果是链接项，先检查源文件是否存在，再跳转
+  if (item._is_link && item._link_source) {
+    const source = item._link_source
+    
+    // 检查源文件是否存在
+    try {
+      const { data } = await axios.post('/api/files/links/check-source', {
+        spaceType: source.spaceType,
+        departmentId: source.departmentId,
+        path: source.path,
+        name: source.name,
+      })
+      
+      if (!data.exists) {
+        // 源文件不存在，提示用户
+        let reason = '源文件可能已被删除、移动或重命名。'
+        if (data.reason === 'no_permission') {
+          reason = '您没有访问源文件所在空间的权限。'
+        }
+        
+        const deleteLink = window.confirm(
+          `⚠️ 无法访问链接目标\n\n${reason}\n\n链接指向：${source.spaceType === 'department' ? `部门空间/${source.departmentId}` : source.spaceType === 'safe' ? '个人保险库' : '公共空间'}/${source.path === '.' ? '' : source.path + '/'}${source.name}\n\n是否删除此快捷链接？`
+        )
+        
+        if (deleteLink) {
+          // 删除链接
+          try {
+            await axios.delete('/api/files/links', {
+              data: {
+                spaceType: spaceType.value,
+                departmentId: spaceType.value === 'department' ? departmentId.value : null,
+                path: getApiPathForList(),
+                linkId: item._link_id,
+              },
+            })
+            await loadList()
+            alert('链接已删除')
+          } catch (e) {
+            alert((e.response && e.response.data && e.response.data.detail) || '删除链接失败')
+          }
+        }
+        return
+      }
+    } catch (e) {
+      console.error('检查链接源失败', e)
+      // 检查失败时仍尝试跳转
+    }
+    
+    pushHistory()  // 记录当前位置
+    // 先切换空间和部门（如果需要）
+    if (source.spaceType !== spaceType.value) {
+      spaceType.value = source.spaceType
+    }
+    if (source.spaceType === 'department' && source.departmentId) {
+      departmentId.value = source.departmentId
+    }
+    // 计算目标路径：如果源是文件夹，直接进入；如果是文件，进入其父目录
+    if (item.is_dir) {
+      // 链接指向文件夹，进入该文件夹
+      const basePath = source.path && source.path !== '.' ? source.path : ''
+      currentPath.value = basePath ? `${basePath}/${source.name}` : source.name
+    } else {
+      // 链接指向文件，进入其父目录
+      currentPath.value = source.path && source.path !== '.' ? source.path : ''
+    }
+    loadList()
+    return
+  }
+  
   if (item.is_dir) {
+    pushHistory()  // 记录当前位置
     if (spaceType.value === 'safe') {
       ensureSafePathForUser()
     }
-
+    // 修复BUG：进入新目录时清空选中项
+    selectedItems.value = []
     const base = currentPath.value && currentPath.value !== '.' ? currentPath.value : ''
     currentPath.value = base ? `${base}/${item.name}` : item.name
     loadList()
@@ -1197,8 +1460,45 @@ const onItemClick = (item) => {
   loadList()
 }
 
+// 记录当前位置到历史栈（在导航前调用）
+const pushHistory = () => {
+  if (isNavigatingBack.value) return  // 返回操作时不记录
+  browseHistory.value.push({
+    spaceType: spaceType.value,
+    departmentId: departmentId.value,
+    path: currentPath.value,
+  })
+  // 限制历史记录数量，避免内存过大
+  if (browseHistory.value.length > 50) {
+    browseHistory.value.shift()
+  }
+}
+
+// 返回上一个访问位置
+const goBack = async () => {
+  if (browseHistory.value.length === 0) return
+  const prev = browseHistory.value.pop()
+  isNavigatingBack.value = true
+  try {
+    // 切换空间
+    if (prev.spaceType !== spaceType.value) {
+      spaceType.value = prev.spaceType
+    }
+    // 切换部门
+    if (prev.spaceType === 'department') {
+      departmentId.value = prev.departmentId || ''
+    }
+    // 切换路径
+    currentPath.value = prev.path || '.'
+    await loadList()
+  } finally {
+    isNavigatingBack.value = false
+  }
+}
+
 const goUp = () => {
   if (!currentPath.value || currentPath.value === '.' ) return
+  pushHistory()  // 记录当前位置
   const parts = currentPath.value.split('/')
   parts.pop()
   currentPath.value = parts.length ? parts.join('/') : '.'
@@ -1206,6 +1506,7 @@ const goUp = () => {
 }
 
 const goRoot = () => {
+  pushHistory()  // 记录当前位置
   // safe 空间根目录：普通用户为手机号目录（展示），但 list API 仍使用 '.'
   if (spaceType.value === 'safe') {
     currentPath.value = '.'
@@ -1230,7 +1531,29 @@ const onRenameSingle = async (item) => {
 }
 
 const onDeleteSingle = async (item) => {
-  const ok = window.confirm(`将把“${item.name}”移入回收站，可在回收站中恢复或彻底删除，是否继续？`)
+  // 如果是链接项，调用链接删除API（不影响源文件）
+  if (item._is_link && item._link_id) {
+    const ok = window.confirm(`将删除快捷链接"${item.name}"，源文件不受影响，是否继续？`)
+    if (!ok) return
+    try {
+      await axios.delete('/api/files/links', {
+        data: {
+          spaceType: spaceType.value,
+          departmentId: spaceType.value === 'department' ? departmentId.value : null,
+          path: getApiPathForList(),
+          linkId: item._link_id,
+        },
+      })
+      selectedItems.value = []
+      await loadList()
+    } catch (e) {
+      alert((e.response && e.response.data && e.response.data.detail) || '删除链接失败')
+    }
+    return
+  }
+  
+  // 普通文件/文件夹删除
+  const ok = window.confirm(`将把"${item.name}"移入回收站，可在回收站中恢复或彻底删除，是否继续？`)
   if (!ok) return
   try {
     const payload = {
@@ -1255,7 +1578,6 @@ const onDeleteSingle = async (item) => {
     alert((e.response && e.response.data && e.response.data.detail) || '删除失败')
   }
 }
-
 const canCompress = computed(() => selectedItems.value.length >= 1)
 const canUnzip = computed(() => {
   if (selectedItems.value.length !== 1) return false
@@ -1724,6 +2046,135 @@ const confirmCopy = async () => {
   }
 }
 
+// ==================== 链接功能 ====================
+
+const closeLinkDialog = () => {
+  showLink.value = false
+}
+
+const onLinkSpaceChange = async () => {
+  if (linkSpaceType.value === 'department') {
+    if (!allDepartments.value.length) {
+      await loadAllDepartments()
+    }
+    linkDepartmentId.value = ''
+  } else {
+    linkDepartmentId.value = ''
+  }
+  linkPath.value = ''
+  await loadLinkList()
+}
+
+const loadLinkList = async () => {
+  if (linkSpaceType.value === 'department' && !linkDepartmentId.value) {
+    linkItems.value = []
+    return
+  }
+  linkLoading.value = true
+  try {
+    const params = {
+      spaceType: linkSpaceType.value,
+      path: linkPath.value || ''
+    }
+    if (linkSpaceType.value === 'department') {
+      params.departmentId = linkDepartmentId.value
+    }
+    const { data } = await axios.get('/api/files/list', { params })
+    // 过滤掉链接项（不显示现有链接）
+    linkItems.value = (data.items || []).filter(it => !it._is_link)
+  } catch (e) {
+    console.error('loadLinkList failed', e)
+    linkItems.value = []
+    if (e.response && e.response.status === 403) {
+      alert('空间未开放或无访问权限，请联系管理员')
+    }
+  } finally {
+    linkLoading.value = false
+  }
+}
+
+const linkGoRoot = async () => {
+  linkPath.value = ''
+  await loadLinkList()
+}
+
+const linkGoUp = async () => {
+  if (!linkPath.value) return
+  const parts = linkPath.value.split('/')
+  parts.pop()
+  linkPath.value = parts.join('/')
+  await loadLinkList()
+}
+
+const onLinkDblClick = async (it) => {
+  if (!it.is_dir) return
+  const parts = linkPath.value ? linkPath.value.split('/') : []
+  parts.push(it.name)
+  linkPath.value = parts.join('/')
+  await loadLinkList()
+}
+
+const onLinkNewFolder = async () => {
+  const name = window.prompt('请输入新建文件夹名称：')
+  if (!name) return
+  try {
+    const payload = {
+      spaceType: linkSpaceType.value,
+      departmentId: linkSpaceType.value === 'department' ? linkDepartmentId.value : null,
+      path: linkPath.value || '',
+      folderName: name,
+    }
+    await axios.post('/api/files/folder', payload)
+    await loadLinkList()
+  } catch (e) {
+    alert((e.response && e.response.data && e.response.data.detail) || '新建文件夹失败')
+  }
+}
+
+const confirmLink = async () => {
+  if (!selectedItems.value.length) return
+  // 过滤掉链接项（不能链接链接）
+  const itemsToLink = selectedItems.value.filter(it => !it._is_link)
+  if (!itemsToLink.length) {
+    alert('无法为链接创建链接')
+    return
+  }
+  
+  try {
+    const srcPath = getApiPathForList()
+    const payload = {
+      items: itemsToLink.map((it) => ({
+        spaceType: spaceType.value,
+        departmentId: spaceType.value === 'department' ? departmentId.value : null,
+        path: srcPath,
+        name: it.name,
+        is_dir: it.is_dir,
+      })),
+      targetSpaceType: linkSpaceType.value,
+      targetDepartmentId: linkSpaceType.value === 'department' ? linkDepartmentId.value : null,
+      targetPath: linkPath.value || '',
+    }
+    const { data } = await axios.post('/api/files/links', payload)
+    showLink.value = false
+    
+    // 显示结果
+    const successCount = (data.results || []).filter(r => r.success).length
+    const failCount = (data.results || []).filter(r => !r.success).length
+    if (failCount > 0) {
+      const failMsgs = (data.results || []).filter(r => !r.success).map(r => `${r.name}: ${r.error}`).join('\n')
+      alert(`创建链接完成：${successCount} 成功，${failCount} 失败\n\n失败详情：\n${failMsgs}`)
+    } else {
+      alert(`成功创建 ${successCount} 个链接`)
+    }
+    
+    // 跳转到目标位置
+    await goToPath(payload.targetSpaceType, payload.targetDepartmentId, payload.targetPath || '.')
+  } catch (e) {
+    const msg = (e.response && e.response.data && e.response.data.detail) || '创建链接失败'
+    alert(msg)
+  }
+}
+
 const headerCols = ref([
   { key: 'name', label: '名称', width: 260, min: 140 },
   { key: 'type', label: '类型', width: 50, min: 50 },
@@ -1782,6 +2233,7 @@ const onMouseUp = () => {
 }
 
 const goToPath = async (space, deptId, path) => {
+  pushHistory()  // 记录当前位置
   spaceType.value = space
   if (space === 'department') {
     await loadDepartments()
@@ -1796,6 +2248,98 @@ const goToPath = async (space, deptId, path) => {
   highlightName.value = ''
   preSelectedNames.value = []
   await loadList()
+}
+
+// 顶部工具栏（空间/部门 + 按钮）保持原样，不参与与面包屑的碰撞计算。
+// 这里只保留占位函数，避免后续扩展时改动过大。
+const updateTopRowLayout = () => {
+  topRowCompact.value = false
+}
+
+// 第二行工具栏（导航 + 面包屑 + 搜索/分享等）布局调整：
+// 1）先尝试在“正常按钮尺寸”下，按实际宽度逐步隐藏左侧目录，确保最后一级不会被右侧区域挡住；
+// 2）当仅剩最后一级仍然放不下时，再将本行按钮切换为紧凑模式重新尝试；
+// 3）如果在紧凑模式下仍然放不下，则不再强制收缩，允许右侧按钮整体向外溢出。
+const updateSecondRowLayout = async () => {
+  const rowEl = secondRow.value
+  const rightEl = secondRight.value
+  const navEl = navGroup.value
+  const bcEl = breadcrumbContainer.value
+  if (!rowEl || !rightEl || !navEl || !bcEl) return
+
+  const crumbs = breadcrumbs.value
+  const total = crumbs.length
+
+  if (!total) {
+    breadcrumbVisibleStart.value = 0
+    secondRowCompact.value = false
+    return
+  }
+
+  // 从“非紧凑模式 + 全部目录可见”开始
+  secondRowCompact.value = false
+  breadcrumbVisibleStart.value = 0
+  await nextTick()
+
+  // 工具函数：在当前按钮模式下，尽可能多隐藏左侧目录，直到不再溢出
+  const shrinkBreadcrumbsToFit = async () => {
+    let safety = 0
+    while (safety < total) {
+      const el = breadcrumbScroll.value || breadcrumbContainer.value
+      if (!el) break
+      const scrollWidth = el.scrollWidth
+      const clientWidth = el.clientWidth
+
+      // 不再溢出，停止收缩
+      if (!clientWidth || scrollWidth <= clientWidth) break
+
+      // 至少保留 2 层目录（如果总数本身小于 2，则保留全部）
+      const minVisible = Math.min(2, total)
+      const remaining = total - breadcrumbVisibleStart.value
+      if (remaining <= minVisible) break
+
+      breadcrumbVisibleStart.value += 1
+      safety += 1
+      await nextTick()
+    }
+  }
+
+  await shrinkBreadcrumbsToFit()
+
+  // 如果在正常按钮尺寸下，已经解决溢出，则直接结束
+  {
+    const el = breadcrumbScroll.value || breadcrumbContainer.value
+    if (!el) return
+    if (!el.clientWidth || el.scrollWidth <= el.clientWidth) {
+      return
+    }
+  }
+
+  // 尝试切换当前行按钮为紧凑模式（仅图标），再收缩一次
+  secondRowCompact.value = true
+  await nextTick()
+  await shrinkBreadcrumbsToFit()
+
+  // 紧凑模式下即使只剩最后一级仍然放不下，也不再强行调整，
+  // 交由整体布局产生水平溢出，让按钮向右侧超出视口。
+}
+
+// 统一入口：根据当前窗口宽度、路径和按钮数量，动态调整两行工具栏布局
+const updateToolbarLayout = () => {
+  updateTopRowLayout()
+  updateSecondRowLayout()
+}
+
+let resizeTimer = null
+const handleResize = () => {
+  if (resizeTimer) {
+    clearTimeout(resizeTimer)
+  }
+  resizeTimer = setTimeout(() => {
+    nextTick(() => {
+      updateToolbarLayout()
+    })
+  }, 120)
 }
 
 const applyPreSelectionAndScroll = async () => {
@@ -2005,6 +2549,7 @@ onMounted(async () => {
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)
   window.addEventListener('hbcloud-open-favorites', onOpenFavorites)
+  window.addEventListener('resize', handleResize)
   loadCurrentUser()
   if (window && window.__hbcloud_refresh_user__) {
     window.__hbcloud_refresh_user__()
@@ -2115,6 +2660,9 @@ onMounted(async () => {
   await loadAllDepartments()
   await applyPreSelectionAndScroll()
 
+  // 初始加载完成后，根据实际宽度计算一次工具栏布局
+  updateToolbarLayout()
+
   if (!hasAppliedShareRedirect && (qName || (qSelected && qSelected.length))) {
     hasAppliedShareRedirect = true
     router.replace({ path: '/files', query: {} })
@@ -2130,10 +2678,22 @@ watch(
   }
 )
 
+// 当路径层级变化时，重置面包屑起始位置，并根据最新宽度重新计算布局
+watch(
+  () => breadcrumbs.value.join('/'),
+  () => {
+    breadcrumbVisibleStart.value = 0
+    nextTick(() => {
+      updateSecondRowLayout()
+    })
+  }
+)
+
 onBeforeUnmount(() => {
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
   window.removeEventListener('hbcloud-open-favorites', onOpenFavorites)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
@@ -2150,6 +2710,18 @@ onBeforeUnmount(() => {
   position: relative;
   flex: 1;
   height: 100%;
+  overflow: auto;
+}
+
+/* 固定工具栏 */
+.toolbar-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #fff;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 0.5rem;
 }
 
 .toolbar-row {
@@ -2157,6 +2729,9 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.25rem;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .top-row {
@@ -2171,15 +2746,29 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
-.second-left {
+.toolbar-left.second-left {
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
   gap: 0.5rem;
+}
+
+.second-left .nav-btn {
+  flex-shrink: 0;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+}
+
+.second-right {
+  flex-shrink: 0;
 }
 
 .field {
@@ -2205,37 +2794,68 @@ onBeforeUnmount(() => {
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .btn {
-  min-width: 80px;
-  padding: 0.25rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: auto;
+  padding: 0.3rem 0.6rem;
   border-radius: 4px;
-  border: 1px solid #9ca3af;
-  background-color: #e5e7eb;
+  border: 1px solid #6b7280;
+  background-color: #f9fafb;
   color: #111827;
   font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.15s ease;
+  height: 2rem;
+}
+
+.btn-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.btn-text {
+  font-size: 0.85rem;
 }
 
 .btn:hover:enabled {
-  background-color: #d1d5db;
+  background-color: #e5e7eb;
+  border-color: #4b5563;
 }
 
 .btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.35;
+  cursor: not-allowed;
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  border-color: #d1d5db;
 }
 
 .btn-danger {
-  border-color: #fca5a5;
-  color: #b91c1c;
+  border-color: #dc2626;
+  color: #dc2626;
+  background-color: #fef2f2;
 }
 
 .btn-danger:hover:enabled {
   background-color: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.btn-danger:disabled {
+  opacity: 0.35;
+  color: #f87171;
+  border-color: #fecaca;
+  background-color: #fef2f2;
 }
 
 .icon-btn {
@@ -2251,6 +2871,53 @@ onBeforeUnmount(() => {
 .icon-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* 导航按钮统一样式 */
+.nav-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 4px;
+  border: 1px solid #6b7280;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
+  font-size: 12px;
+  font-weight: bold;
+  color: #374151;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  line-height: 1;
+  padding: 0;
+}
+
+.nav-btn:hover:enabled {
+  background: linear-gradient(180deg, #f9fafb 0%, #e5e7eb 100%);
+  border-color: #4b5563;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-btn:active:enabled {
+  background: #e5e7eb;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f3f4f6;
+  color: #9ca3af;
+  border-color: #d1d5db;
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .search-bar {
@@ -2279,11 +2946,85 @@ onBeforeUnmount(() => {
   color: #6b6e75;
 }
 
+/* 面包屑导航样式 */
+.breadcrumb-container {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding-right: 4px; /* 与右侧按钮之间保持一个“缓冲区”，避免视觉碰撞 */
+}
+
+.breadcrumb-scroll {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+.breadcrumb-btn {
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.breadcrumb-btn:hover {
+  background: #d1d5db;
+  color: #111827;
+}
+
+.breadcrumb-btn.root-btn {
+  padding: 0.15rem 0.35rem;
+  font-weight: bold;
+}
+
+.breadcrumb-btn.current-crumb {
+  background: #7c9dd5;
+  color: #111827;
+  font-weight: 500;
+  cursor: default;
+}
+
+.breadcrumb-sep {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  margin: 0 0.15rem;
+  flex-shrink: 0;
+}
+
+.breadcrumb-ellipsis {
+  font-size: 0.8rem;
+  color: #6b7280;
+  padding: 0.15rem 0.3rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .second-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.8rem;
+  flex-shrink: 0;
+}
+
+/* 行级紧凑模式：仅显示图标，隐藏文字，减小按钮占宽度 */
+.toolbar-row.compact-row .btn-text {
+  display: none;
+}
+
+.toolbar-row.compact-row .btn {
+  min-width: 2rem;
+  width: 2rem;
+  padding: 0.3rem;
 }
 
 .ops-head {
@@ -2585,6 +3326,16 @@ onBeforeUnmount(() => {
   color: #b91c1c;
 }
 
+.link-tip {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #1e40af;
+  background: #eff6ff;
+  border-radius: 4px;
+  border-left: 3px solid #3b82f6;
+}
+
 .move-row.move-target-row {
   display: flex;
   align-items: flex-end;
@@ -2869,5 +3620,29 @@ onBeforeUnmount(() => {
 .fade-fav-leave-to {
   opacity: 0;
   transform: translateX(-20px);
+}
+
+/* 响应式：窄屏时隐藏按钮文字，只显示图标 */
+@media (max-width: 1200px) {
+  .btn-text {
+    display: none;
+  }
+  .btn {
+    min-width: 2rem;
+    width: 2rem;
+    padding: 0.3rem;
+  }
+  .search-bar input {
+    width: 100px;
+  }
+}
+
+@media (max-width: 900px) {
+  .search-bar input {
+    width: 80px;
+  }
+  .breadcrumb-container {
+    min-width: 40px;
+  }
 }
 </style>

@@ -17,6 +17,7 @@ from ..services.files import search_zip as search_zip_svc
 from ..services.files import recycle as recycle_svc
 from ..services.files import dept_roles as dept_roles_svc
 from ..services.files import favorites as favorites_svc
+from ..services.files import links as links_svc
 from ..routers import audit as audit_router  # 仅为类型提示，不在此使用
 
 router = APIRouter(tags=["files"])
@@ -45,16 +46,34 @@ class FolderCreateRequest(BaseModel):
     folderName: str
 
 
+class LinkSource(BaseModel):
+    """链接源信息"""
+    spaceType: Optional[str] = None
+    departmentId: Optional[str] = None
+    path: Optional[str] = None
+    name: Optional[str] = None
+
+
 class FileItem(BaseModel):
     name: str
     is_dir: bool
     size: int
     modified_time: float
+    # 链接相关字段（可选）- 使用 Field 指定别名
+    is_link: Optional[bool] = None
+    link_id: Optional[str] = None
+    link_source: Optional[LinkSource] = None
+    
+    class Config:
+        extra = "allow"  # 允许额外字段
 
 
 class FileListResponse(BaseModel):
     current_path: str
     items: List[FileItem]
+    
+    class Config:
+        extra = "allow"
 
 
 class DeleteItem(BaseModel):
@@ -436,7 +455,7 @@ async def update_department_roles(
     return dept_roles_svc.get_dept_roles(dept_id)
 
 
-@router.get("/list", response_model=FileListResponse)
+@router.get("/list")
 async def list_files(
     request: Request,
     spaceType: str = Query(...),
@@ -691,4 +710,90 @@ async def delete_favorite_path(payload: FavoriteDeleteRequest, current_user: dic
     phone = current_user.get("phone") or ""
     favorites_svc.remove_favorite(phone, payload.spaceType, payload.departmentId, payload.path or "")
     return {"ok": True}
+
+
+# ==================== 链接管理 API ====================
+
+class LinkSourceItem(BaseModel):
+    """链接源项目"""
+    spaceType: str
+    departmentId: Optional[str] = None
+    path: str = ""
+    name: str
+    is_dir: bool
+
+
+class CreateLinkRequest(BaseModel):
+    """创建链接请求"""
+    items: List[LinkSourceItem]  # 支持多选创建链接
+    targetSpaceType: str
+    targetDepartmentId: Optional[str] = None
+    targetPath: str = ""
+
+
+class DeleteLinkRequest(BaseModel):
+    """删除链接请求"""
+    spaceType: str
+    departmentId: Optional[str] = None
+    path: str = ""
+    linkId: str
+
+
+class CheckLinkSourceRequest(BaseModel):
+    """检查链接源是否存在"""
+    spaceType: str
+    departmentId: Optional[str] = None
+    path: str = ""
+    name: str
+
+
+@router.post("/links")
+async def create_links(payload: CreateLinkRequest, current_user: dict = Depends(get_current_user)):
+    """创建快捷链接（批量）"""
+    results = []
+    for item in payload.items:
+        try:
+            result = await links_svc.create_link(
+                source_space_type=item.spaceType,
+                source_department_id=item.departmentId,
+                source_path=item.path,
+                source_name=item.name,
+                source_is_dir=item.is_dir,
+                target_space_type=payload.targetSpaceType,
+                target_department_id=payload.targetDepartmentId,
+                target_path=payload.targetPath,
+                current_user=current_user,
+            )
+            results.append({"name": item.name, "success": True, "link_id": result.get("link_id")})
+        except HTTPException as e:
+            results.append({"name": item.name, "success": False, "error": e.detail})
+        except Exception as e:
+            results.append({"name": item.name, "success": False, "error": str(e)})
+    return {"results": results}
+
+
+@router.delete("/links")
+async def delete_link(payload: DeleteLinkRequest, current_user: dict = Depends(get_current_user)):
+    """删除快捷链接（仅删除链接本身，不影响源文件）"""
+    result = await links_svc.delete_link(
+        space_type=payload.spaceType,
+        department_id=payload.departmentId,
+        path=payload.path,
+        link_id=payload.linkId,
+        current_user=current_user,
+    )
+    return result
+
+
+@router.post("/links/check-source")
+async def check_link_source(payload: CheckLinkSourceRequest, current_user: dict = Depends(get_current_user)):
+    """检查链接源文件是否存在且可访问"""
+    result = await links_svc.check_link_source(
+        source_space_type=payload.spaceType,
+        source_department_id=payload.departmentId,
+        source_path=payload.path,
+        source_name=payload.name,
+        current_user=current_user,
+    )
+    return result
 
