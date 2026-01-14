@@ -1,4 +1,4 @@
-# HBCloud.Web（开放网盘）
+# HBCloud（开放网盘）
 
 > 面向使用者的说明放在本文件；面向开发者的说明见 README_DEV.md。
 
