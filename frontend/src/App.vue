@@ -1,5 +1,5 @@
 <template>
-  <div class="app-root">
+  <div class="app-root" :class="{ 'is-mobile-shell': isMobileShell }">
     <!-- 水印层：仅登录后显示，覆盖全屏但不影响交互 -->
     <div
       v-if="watermarkText"
@@ -8,7 +8,7 @@
       :style="watermarkStyle"
     ></div>
 
-    <header class="app-header">
+    <header v-if="!isMobileShell" class="app-header">
       <div class="app-left">
         <h1>HBCloud 河北分院开放网盘</h1>
       </div>
@@ -21,7 +21,7 @@
         <button class="logout-btn" type="button" @click="onLogout">登出</button>
       </div>
     </header>
-    <aside class="app-sidebar">
+    <aside v-if="!isMobileShell" class="app-sidebar">
       <nav class="sidebar-nav">
         <router-link to="/" class="side-link">
           <span class="icon">🏠</span>
@@ -59,13 +59,14 @@
         </button>
       </div>
     </aside>
-    <main class="app-main">
+    <main class="app-main" :class="{ 'mobile-main': isMobileShell }">
       <router-view v-slot="{ Component }">
         <transition name="page-fade" mode="out-in">
           <component :is="Component" />
         </transition>
       </router-view>
     </main>
+
   </div>
 </template>
 
@@ -75,6 +76,8 @@ import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
+
+const isMobileShell = computed(() => route.path && route.path.startsWith('/m'))
 
 // 记录上一次非 /help 的页面路径，用于从帮助页返回
 if (!window.__hbcloud_last_route__) {
@@ -405,6 +408,13 @@ const openFavorites = async () => {
   padding: 1rem;
   background-color: #f3f4f6;
   overflow: auto; /* 仅内容区滚动 */
+}
+
+.app-main.mobile-main {
+  top: 0;
+  left: 0;
+  padding: 0;
+  overflow: hidden; /* 由移动端壳内部滚动 */
 }
 
 /* 路由页面切换 0.25s 统一过渡 */

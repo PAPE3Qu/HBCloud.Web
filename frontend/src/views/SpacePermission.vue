@@ -1,6 +1,16 @@
 <template>
-  <div class="space-permission">
-    <div class="sp-left">
+  <div class="space-permission" :class="{ 'sp-mobile': isMobileShell }">
+    <div v-if="isMobileShell" class="sp-mobile-top">
+      <div class="sp-mobile-title">空间权限</div>
+      <div class="sp-mobile-select-row">
+        <select class="sp-mobile-select" v-model="mobileDeptId" @change="onMobileDeptChange">
+          <option value="__public__">公共空间</option>
+          <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name || d.id }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div v-if="!isMobileShell" class="sp-left">
       <div class="sp-left-header">
         <h2>部门列表</h2>
         <div class="sp-left-tip">从左侧选择一个部门，右侧将展示其配置。</div>
@@ -406,6 +416,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   listDepartments,
   getDepartmentConfig,
@@ -416,8 +427,25 @@ import {
   setOpUsers,
 } from '../services/recycle'
 
+const route = useRoute()
+const isMobileShell = computed(() => (route.path || '').startsWith('/m'))
+
 const departments = ref([])
 const currentDeptId = ref('')
+
+// 移动端下拉：默认公共空间，切换时复用 selectDept 的确认逻辑
+const mobileDeptId = ref('__public__')
+
+const onMobileDeptChange = async () => {
+  const target = mobileDeptId.value || '__public__'
+  await selectDept(target, target === '__public__')
+  // 若用户取消了切换（有未保存修改），这里把下拉值恢复为当前 deptId
+  mobileDeptId.value = currentDeptId.value || '__public__'
+}
+
+watch(currentDeptId, (v) => {
+  mobileDeptId.value = v || '__public__'
+}, { immediate: true })
 const deptConfig = ref(null)
 const loading = ref(false)
 
@@ -1931,5 +1959,54 @@ const onAfterRightSwitch = () => {
 .sp-roles-pop-leave-from {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ============
+ * 移动端适配（/m）
+ * ============ */
+.sp-mobile-top {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.sp-mobile-title {
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.sp-mobile-select-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sp-mobile-select {
+  flex: 1;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.sp-mobile .sp-right {
+  width: 100%;
+}
+
+/* 移动端：部门管理员/成员/空间详情纵向排列 */
+.sp-mobile .sp-roles-two-cols {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-mobile .sp-roles-two-cols .col {
+  width: 100%;
+}
+
+/* 移动端：成员选择弹窗改为单列 */
+.sp-mobile .sp-user-grid {
+  grid-template-columns: 1fr;
 }
 </style>

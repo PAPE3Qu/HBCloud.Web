@@ -1,5 +1,5 @@
 <template>
-  <div class="home-layout">
+  <div class="home-layout" :class="{ 'is-mobile-shell': isMobileShell }">
     <div class="home-center">
       <div ref="publishCardRef" class="publish-card card card-elevated">
         <div class="publish-header">
@@ -154,7 +154,7 @@
       </div>
     </div>
 
-    <aside class="home-right">
+    <aside v-if="!isMobileShell" class="home-right">
       <div class="right-card tips-card">
         <div class="right-title">使用小提示</div>
         <transition name="fade-tip" mode="out-in">
@@ -325,7 +325,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import axios from 'axios'
+
+const route = useRoute()
+const isMobileShell = computed(() => (route.path || '').startsWith('/m'))
 
 const currentUser = ref(null)
 
