@@ -3542,7 +3542,8 @@ onBeforeUnmount(() => {
   box-shadow: 2px 0 6px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  z-index: 20;
+  /* 需高于顶部工具栏（toolbar-sticky: z-index 100），避免被遮挡 */
+  z-index: 300;
   border-radius: 6px; /* 新增：给快速访问弹窗加圆角 */
 }
 
